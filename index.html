@@ -132,11 +132,17 @@ async function load() {
         if (/random favorite/i.test(s.displayName)) return;
         const seen = new Set(), vars = [];
         const add = (n, a, b) => { const img = a || b; if (img && !seen.has(img)) { seen.add(img); vars.push({ name: n, img, alt: b }); } };
-        (s.chromas || []).forEach(c => {
+        // The base chroma (no "(Variant ...)" label) IS the default look, so it becomes the single "Default" entry.
+        const chromas = s.chromas || [];
+        const isBase = c => !/\(/.test(c.displayName || "");
+        const baseC = chromas.find(isBase);
+        const defImg = s.displayIcon || (baseC && (baseC.displayIcon || baseC.fullRender));
+        if (defImg) add("Default", defImg, baseC ? (baseC.fullRender || baseC.displayIcon) : null);
+        chromas.forEach(c => {
+          if (isBase(c)) return;
           const m = /\(([^)]*)\)/.exec(c.displayName || "");
-          add(m ? (m[1].replace(/^Variant \d+\s*/i, "").trim() || m[1]) : "Default", c.displayIcon, c.fullRender);
+          add((m[1].replace(/^Variant \d+\s*/i, "").trim() || m[1]), c.displayIcon, c.fullRender);
         });
-        if (s.displayIcon && !seen.has(s.displayIcon)) vars.unshift({ name: "Default", img: s.displayIcon });
         if (!vars.length) return;
         skinsBy[name][s.uuid] = { id: s.uuid, name: s.displayName, tier: s.contentTierUuid, weapon: name, vars };
       });
