@@ -53,6 +53,16 @@ main{max-width:1300px;margin:0 auto;padding:10px 20px 40px}
 .login{max-width:340px;margin:60px auto;text-align:center}
 .login input{width:100%;margin-bottom:10px}
 .err{color:var(--red);font-size:13px;min-height:18px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:800px;margin:16px auto}
+.opts button{padding:24px 14px;text-transform:none;letter-spacing:0;font-size:20px;font-weight:700;border-width:2px}
+.opts small{display:block;font-weight:400;color:var(--mut);font-size:13px;margin-top:6px}
+.guide{max-width:800px;margin:24px auto 0}
+.tr{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.tr h3{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;text-transform:uppercase;letter-spacing:1px}
+.tag{font-size:10px;background:var(--red);color:#fff;padding:2px 6px;border-radius:3px;letter-spacing:1px}
+.ex{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ex div{text-align:center;font-size:12px;color:var(--mut)}
+.ex img{width:100%;height:64px;object-fit:contain;display:block}
 button,.card{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .card.pick:active{border-color:var(--red);transform:scale(.99)}
 @media(hover:none){.card.pick:hover{transform:none;border-color:var(--line)}}
@@ -89,6 +99,9 @@ input,select{font-size:16px}
 .small .name{font-size:14px}
 .tools input{flex:1 1 100%}
 .login{margin:30px auto}
+.opts{grid-template-columns:1fr}
+.ex img{height:46px}
+.ex div{font-size:11px}
 }
 </style>
 </head>
@@ -124,7 +137,7 @@ async function load() {
       fetch(API + "/weapons").then(r => r.json()),
       fetch(API + "/contenttiers").then(r => r.json()).catch(() => ({ data: [] }))
     ]);
-    (t.data || []).forEach(x => tiers[x.uuid] = { name: x.devName, color: "#" + (x.highlightColor || "8b978fff").slice(0, 6) });
+    (t.data || []).forEach(x => tiers[x.uuid] = { name: x.devName, rank: x.rank, color: "#" + (x.highlightColor || "8b978fff").slice(0, 6) });
     WEAPONS.forEach(name => {
       skinsBy[name] = {};
       const wp = w.data.find(x => x.displayName === name);
@@ -165,21 +178,71 @@ function readSaved(w) {
 }
 function save() { try { localStorage.setItem(keyOf(W), JSON.stringify(S)); } catch (e) {} }
 
+const ORDER = ["Select", "Deluxe", "Premium", "Exclusive", "Ultra"];
+const tierIdx = t => { const i = ORDER.indexOf(t.name); return i >= 0 ? i : (typeof t.rank === "number" ? t.rank : -1); };
+const isPremium = s => { const t = tiers[s.tier]; return !!t && tierIdx(t) >= 2; };
+function activeSkins(w, mode) {
+  const all = skinsBy[w];
+  if (mode !== "premium") return all;
+  const o = {};
+  Object.values(all).forEach(s => { if (isPremium(s)) o[s.id] = s; });
+  return o;
+}
+
 function pickWeapon(w) {
-  W = w; skins = skinsBy[w];
-  const saved = readSaved(w), ids = Object.keys(skins);
-  if (saved) {
-    S = saved; S.hist = S.hist || [];
-    const ok = id => skins[id];
-    S.ranked = S.ranked.filter(ok); S.pending = S.pending.filter(ok);
-    if (S.cur && !ok(S.cur)) S.cur = null;
-    const known = new Set([...S.ranked, ...S.pending, S.cur]);
-    ids.forEach(id => { if (!known.has(id)) S.pending.push(id); });
-    if (S.hi > S.ranked.length) S.hi = S.ranked.length;
-  } else {
-    S = { ranked: [], pending: shuffle(ids), cur: null, lo: 0, hi: 0, hist: [] };
-  }
+  W = w; S = null; skins = skinsBy[w];
+  const saved = readSaved(w);
+  if (!saved) return go("S");
+  S = saved; S.mode = S.mode || "all"; S.hist = S.hist || [];
+  skins = activeSkins(w, S.mode);
+  const ok = id => skins[id];
+  S.ranked = S.ranked.filter(ok); S.pending = S.pending.filter(ok);
+  if (S.cur && !ok(S.cur)) S.cur = null;
+  const known = new Set([...S.ranked, ...S.pending, S.cur]);
+  Object.keys(skins).forEach(id => { if (!known.has(id)) S.pending.push(id); });
+  if (S.hi > S.ranked.length) S.hi = S.ranked.length;
   advance(); save(); go("R");
+}
+
+function startRanking(mode) {
+  skins = activeSkins(W, mode);
+  S = { mode, ranked: [], pending: shuffle(Object.keys(skins)), cur: null, lo: 0, hi: 0, hist: [] };
+  advance(); save(); go("R");
+}
+
+function setup(m) {
+  $("info").textContent = "Before you start";
+  const all = skinsBy[W], total = Object.keys(all).length, prem = Object.values(all).filter(isPremium).length;
+  const h = document.createElement("div"); h.className = "msg"; h.style.padding = "20px 10px 0";
+  h.innerHTML = "<h2 style='color:#ece8e1;margin:0 0 6px'>Which " + W + " skins do you want to rank?</h2>Pick one to begin. Your choice is saved with your ranking.";
+  const o = document.createElement("div"); o.className = "opts";
+  [["all", "All skins", total + " skins · every rarity, including Standard"],
+   ["premium", "Premium+ only", prem + " skins · Premium, Exclusive and Ultra rarities"]].forEach(([mode, t, d]) => {
+    const b = document.createElement("button"); b.innerHTML = t + "<small>" + d + "</small>";
+    b.disabled = mode === "premium" && !prem;
+    b.onclick = () => startRanking(mode); o.appendChild(b);
+  });
+  m.append(h, o);
+  const g = document.createElement("div"); g.className = "guide";
+  g.innerHTML = "<h3 style='margin:0 0 10px;color:#8b978f;font-size:13px;letter-spacing:2px;text-transform:uppercase'>Rarity guide, lowest to highest (with example skins)</h3>";
+  const byTier = {};
+  Object.values(all).forEach(s => (byTier[s.tier || "none"] = byTier[s.tier || "none"] || []).push(s));
+  Object.keys(byTier).filter(k => tiers[k]).sort((a, b) => tierIdx(tiers[a]) - tierIdx(tiers[b])).forEach(k => {
+    const t = tiers[k], row = document.createElement("div"); row.className = "tr"; row.style.setProperty("--c", t.color);
+    const hd = document.createElement("h3");
+    hd.innerHTML = "<span></span><small style='color:#8b978f;font-weight:400'></small>";
+    hd.children[0].textContent = t.name; hd.children[0].style.color = t.color;
+    hd.children[1].textContent = byTier[k].length + " skins";
+    if (tierIdx(t) >= 2) hd.insertAdjacentHTML("beforeend", '<span class="tag">PREMIUM+</span>');
+    row.appendChild(hd);
+    const ex = document.createElement("div"); ex.className = "ex";
+    shuffle(byTier[k].slice()).slice(0, 3).forEach(s => {
+      const d = document.createElement("div"); d.appendChild(imgEl(s.vars[0])); d.appendChild(document.createTextNode(s.name)); ex.appendChild(d);
+    });
+    row.appendChild(ex); g.appendChild(row);
+  });
+  if (byTier.none) g.insertAdjacentHTML("beforeend", '<div class="hint">Skins with no rarity (like the Standard skin) are only included in “All skins”.</div>');
+  m.appendChild(g);
 }
 
 function advance() {
@@ -270,13 +333,14 @@ function cardEl(s, onPick, small) {
 
 function render() {
   const m = $("main"); m.innerHTML = "";
-  const hasW = !!W;
+  const hasW = !!(W && S);
   $("tR").style.display = $("tL").style.display = hasW ? "" : "none";
   ["R", "L", "H", "A"].forEach(v => $("t" + v).classList.toggle("on", view === v));
-  $("ttl").innerHTML = (hasW ? W : "Valorant") + " <b>Skin</b> Ranker";
+  $("ttl").innerHTML = (W && view !== "H" && view !== "A" ? W : "Valorant") + " <b>Skin</b> Ranker";
   $("pb").style.width = "0";
   if (view === "H") return home(m);
   if (view === "A") return admin(m);
+  if (view === "S" && W) return setup(m);
   if (!hasW) return go("H");
   const total = Object.keys(skins).length, done = S.ranked.length;
   $("pb").style.width = (done / total * 100) + "%";
@@ -289,9 +353,9 @@ function home(m) {
   const h = document.createElement("div"); h.className = "msg"; h.innerHTML = "<h2 style='color:#ece8e1'>What do you want to rank?</h2>";
   const g = document.createElement("div"); g.className = "big";
   WEAPONS.forEach(w => {
-    const total = Object.keys(skinsBy[w]).length, sv = readSaved(w), d = sv ? sv.ranked.length : 0;
+    const sv = readSaved(w), total = Object.keys(activeSkins(w, sv ? sv.mode : "all")).length, d = sv ? sv.ranked.length : 0;
     const b = document.createElement("button");
-    b.innerHTML = w.toUpperCase() + "<small>" + (d ? d + " / " + total + " ranked · continue" : total + " skins · start") + "</small>";
+    b.innerHTML = w.toUpperCase() + "<small>" + (sv ? d + " / " + total + " ranked" + (sv.mode === "premium" ? " (Premium+)" : "") + " · continue" : total + " skins · start") + "</small>";
     b.onclick = () => pickWeapon(w);
     g.appendChild(b);
   });
@@ -300,11 +364,11 @@ function home(m) {
 
 function rank(m, total, done) {
   if (S.cur == null) {
-    $("info").textContent = "All " + total + " " + W + " skins ranked!";
+    $("info").textContent = "All " + total + (S.mode === "premium" ? " Premium+ " : " ") + W + " skins ranked!";
     m.innerHTML = '<div class="msg"><h2>You are done 🎉</h2>Check “My ranking” for your full list.</div>';
     return;
   }
-  $("info").textContent = done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap a skin to pick it" : " · ← / → keys to choose");
+  $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap a skin to pick it" : " · ← / → keys to choose");
   const mid = (S.lo + S.hi) >> 1, a = S.cur, b = S.ranked[mid];
   const left = flip ? b : a, right = flip ? a : b;
   const arena = document.createElement("div"); arena.className = "arena";
@@ -321,7 +385,7 @@ function rank(m, total, done) {
 }
 
 function list(m, total, done) {
-  $("info").textContent = done + " ranked, " + (total - done) + " still to place";
+  $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " ranked, " + (total - done) + " still to place";
   const tools = document.createElement("div"); tools.className = "tools";
   tools.innerHTML = '<button id="cp">Copy as text</button><button id="rs">Start over</button>';
   m.appendChild(tools);
