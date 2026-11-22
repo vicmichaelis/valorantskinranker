@@ -367,7 +367,12 @@ function openVideo(s, i) {
   note.textContent = u.exact ? (i === 0 ? "Final upgrade preview: all effects, sounds and the finisher." : "Preview of this color variant.")
     : "No separate video exists for the “" + vname + "” color, so this shows the default color’s preview.";
   vid.onerror = () => { note.textContent = "Couldn’t load this video. Check your connection and try again."; };
-  vid.src = u.url; vid.muted = false;
+  vid.src = u.url;
+  // Remember the last volume/mute choice across videos and visits (first-ever default: 50%).
+  let sv = { v: 0.5, m: false };
+  try { const r = JSON.parse(localStorage.getItem("skinRankerVolume")); if (r && typeof r.v === "number") sv = r; } catch (e) {}
+  vid.volume = Math.min(1, Math.max(0, sv.v)); vid.muted = !!sv.m;
+  vid.onvolumechange = () => { try { localStorage.setItem("skinRankerVolume", JSON.stringify({ v: vid.volume, m: vid.muted })); } catch (e) {} };
   o.onclick = e => { if (e.target === o) closeVideo(); };
   o.querySelector("#vx").onclick = closeVideo;
   document.body.appendChild(o);
