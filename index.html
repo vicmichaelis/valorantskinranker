@@ -63,6 +63,8 @@ main{max-width:1300px;margin:0 auto;padding:10px 20px 40px}
 .ex{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .ex div{text-align:center;font-size:12px;color:var(--mut)}
 .ex img{width:100%;height:64px;object-fit:contain;display:block}
+.share{max-width:560px;margin:10px auto;text-align:center}
+.prev{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);display:block}
 button,.card{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .card.pick:active{border-color:var(--red);transform:scale(.99)}
 @media(hover:none){.card.pick:hover{transform:none;border-color:var(--line)}}
@@ -345,6 +347,7 @@ function render() {
   const total = Object.keys(skins).length, done = S.ranked.length;
   $("pb").style.width = (done / total * 100) + "%";
   if (view === "R") return rank(m, total, done);
+  if (view === "I") return shareView(m, done);
   return list(m, total, done);
 }
 
@@ -365,7 +368,8 @@ function home(m) {
 function rank(m, total, done) {
   if (S.cur == null) {
     $("info").textContent = "All " + total + (S.mode === "premium" ? " Premium+ " : " ") + W + " skins ranked!";
-    m.innerHTML = '<div class="msg"><h2>You are done 🎉</h2>Check “My ranking” for your full list.</div>';
+    m.innerHTML = '<div class="msg" style="padding:18px 10px 6px"><h2 style="margin:0 0 6px;color:#ece8e1">You are done 🎉</h2>Here is your top 10 to download or copy. Your full list is under “My ranking”.</div>';
+    sharePanel(m);
     return;
   }
   $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap a skin to pick it" : " · ← / → keys to choose");
@@ -387,10 +391,11 @@ function rank(m, total, done) {
 function list(m, total, done) {
   $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " ranked, " + (total - done) + " still to place";
   const tools = document.createElement("div"); tools.className = "tools";
-  tools.innerHTML = '<button id="cp">Copy as text</button><button id="rs">Start over</button>';
+  tools.innerHTML = '<button id="cp">Copy as text</button><button id="sh">Share top 10 image</button><button id="rs">Start over</button>';
   m.appendChild(tools);
   $("cp").onclick = () => navigator.clipboard.writeText(S.ranked.map((id, i) => (i + 1) + ". " + skins[id].name).join("\n")).then(() => $("cp").textContent = "Copied!");
   $("rs").onclick = restart;
+  $("sh").onclick = () => go("I"); $("sh").disabled = !S.ranked.length;
   if (!S.ranked.length) m.insertAdjacentHTML("beforeend", '<div class="msg">Nothing ranked yet. Go pick some skins!</div>');
   S.ranked.forEach((id, i) => {
     const s = skins[id], t = tiers[s.tier], r = document.createElement("div"); r.className = "row";
@@ -402,6 +407,93 @@ function list(m, total, done) {
     s.vars.slice(0, 6).forEach(v => { const x = imgEl(v); x.style.cssText = "width:42px;height:24px"; vv.appendChild(x); });
     m.appendChild(r);
   });
+}
+
+async function loadImg(v) {
+  for (const u of [v.img, v.alt]) {
+    if (!u) continue;
+    try {
+      const r = await fetch(u, { mode: "cors" });
+      if (!r.ok) throw 0;
+      const im = new Image(); im.src = URL.createObjectURL(await r.blob()); await im.decode(); return im;
+    } catch (e) {
+      try { return await new Promise((res, rej) => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => res(im); im.onerror = rej; im.src = u; }); } catch (e2) {}
+    }
+  }
+  return null;
+}
+
+async function renderCard(top) {
+  const imgs = await Promise.all(top.map(sk => loadImg(sk.vars[0])));
+  const missing = imgs.filter(i => !i).length;
+  const Wd = 1080, n = top.length, rowH = 114, gap = 8, y0 = 270, Hd = y0 + n * (rowH + gap) + 70;
+  const c = document.createElement("canvas"); c.width = Wd; c.height = Hd;
+  const x = c.getContext("2d"), F = '"Segoe UI", Roboto, Arial, sans-serif';
+  const rr = (px, py, w, h, r) => { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r); x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); };
+  x.fillStyle = "#0f1923"; x.fillRect(0, 0, Wd, Hd);
+  x.fillStyle = "rgba(255,70,85,.13)"; x.beginPath(); x.moveTo(Wd - 460, 0); x.lineTo(Wd, 0); x.lineTo(Wd, 320); x.closePath(); x.fill();
+  x.fillStyle = "#ff4655"; x.fillRect(50, 70, 8, 160);
+  x.textAlign = "left"; x.textBaseline = "alphabetic";
+  x.fillStyle = "#ece8e1"; x.font = "800 80px " + F; x.fillText("MY TOP " + n, 80, 140);
+  x.fillStyle = "#ff4655"; x.font = "800 52px " + F; x.fillText(W.toUpperCase() + " SKINS", 80, 200);
+  x.fillStyle = "#8b978f"; x.font = "600 22px " + F; x.fillText(S.mode === "premium" ? "PREMIUM+ RANKING" : "ALL SKINS RANKING", 80, 235);
+  top.forEach((sk, i) => {
+    const y = y0 + i * (rowH + gap), t = tiers[sk.tier];
+    rr(50, y, 980, rowH, 10); x.fillStyle = i === 0 ? "#2a2a38" : "#1b2733"; x.fill();
+    if (i === 0) { x.strokeStyle = "#ff4655"; x.lineWidth = 3; x.stroke(); }
+    x.fillStyle = t ? t.color : "#ff4655"; x.fillRect(50, y + 12, 7, rowH - 24);
+    x.fillStyle = "#ff4655"; x.font = "800 54px " + F; x.textAlign = "center";
+    x.fillText(String(i + 1).padStart(2, "0"), 125, y + 72);
+    x.textAlign = "left";
+    const im = imgs[i];
+    if (im) {
+      const bw = 400, bh = 96, k = Math.min(bw / im.width, bh / im.height), dw = im.width * k, dh = im.height * k;
+      x.drawImage(im, 190 + (bw - dw) / 2, y + 9 + (bh - dh) / 2, dw, dh);
+    }
+    let fs = 38; x.font = "800 " + fs + "px " + F;
+    while (x.measureText(sk.name).width > 380 && fs > 20) { fs--; x.font = "800 " + fs + "px " + F; }
+    x.fillStyle = "#ece8e1"; x.fillText(sk.name, 620, y + 60);
+    if (t) { x.fillStyle = t.color; x.font = "700 22px " + F; x.fillText(t.name.toUpperCase(), 620, y + 92); }
+  });
+  x.textAlign = "center"; x.fillStyle = "#8b978f"; x.font = "600 22px " + F;
+  x.fillText(W + " Skin Ranker  ·  " + new Date().toLocaleDateString(), Wd / 2, Hd - 26);
+  return { canvas: c, missing };
+}
+
+function shareView(m, done) {
+  $("info").textContent = done ? "Top " + Math.min(10, done) + " share image" + (S.cur != null ? " (based on your ranking so far)" : "") : "Rank some skins first";
+  if (!done) { m.innerHTML = '<div class="msg">Rank at least one skin first.</div>'; return; }
+  sharePanel(m);
+}
+
+function sharePanel(m) {
+  const top = S.ranked.slice(0, 10).map(id => skins[id]);
+  const box = document.createElement("div"); box.className = "share";
+  box.innerHTML = '<div class="msg" style="padding:30px 0">Building your image…</div>';
+  m.appendChild(box);
+  renderCard(top).then(async ({ canvas, missing }) => {
+    box.innerHTML = "";
+    canvas.className = "prev"; box.appendChild(canvas);
+    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+    const fname = "my-top-" + top.length + "-" + W.toLowerCase() + "-skins.png";
+    const bar = document.createElement("div"); bar.className = "tools"; bar.style.justifyContent = "center";
+    bar.innerHTML = '<button id="dl">Download image</button><button id="ci">Copy image</button><button id="sx">Share…</button>';
+    const st = document.createElement("div"); st.className = "hint"; st.style.minHeight = "18px";
+    box.append(bar, st);
+    if (missing) st.textContent = missing + " skin picture(s) could not be loaded into the image (blocked by the image host), so only their names appear.";
+    $("dl").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname; a.click(); st.textContent = "Download started."; };
+    $("ci").onclick = async () => {
+      try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); st.textContent = "Image copied! Paste it anywhere."; }
+      catch (e) { st.textContent = "Copying images isn't supported here. Use Download instead."; }
+    };
+    $("sx").onclick = async () => {
+      const f = new File([blob], fname, { type: "image/png" });
+      try {
+        if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f] });
+        else st.textContent = "Sharing isn't supported here. Use Download or Copy instead.";
+      } catch (e) {}
+    };
+  }).catch(() => { box.innerHTML = '<div class="msg">Could not build the image. Please try again.</div>'; });
 }
 
 function admin(m) {
