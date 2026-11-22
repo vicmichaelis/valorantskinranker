@@ -63,6 +63,9 @@ main{max-width:1300px;margin:0 auto;padding:10px 20px 40px}
 .ex{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .ex div{text-align:center;font-size:12px;color:var(--mut)}
 .ex img{width:100%;height:64px;object-fit:contain;display:block}
+.decide{max-width:560px;margin:12px auto;background:var(--panel);border:1px solid var(--red);border-radius:8px;padding:12px;font-size:13px;color:var(--mut);text-align:center}
+.decide b{display:block;color:var(--txt);font-size:15px;margin-bottom:4px}
+.row .n.t{font-size:15px}
 .share{max-width:560px;margin:10px auto;text-align:center}
 .prev{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);display:block}
 button,.card{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -127,7 +130,7 @@ const API = "https://valorant-api.com/v1";
 const WEAPONS = ["Vandal", "Phantom"];
 const ADMIN_PW = "lemonexusisthebest";
 const keyOf = w => "skinRanker_" + w;
-let skinsBy = {}, tiers = {}, W = null, skins = {}, S = null, flip = false, view = "H";
+let skinsBy = {}, tiers = {}, W = null, skins = {}, S = null, flip = false, view = "H", decideOpen = false;
 const $ = id => document.getElementById(id);
 const TOUCH = matchMedia("(hover: none)").matches;
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -191,6 +194,15 @@ function activeSkins(w, mode) {
   return o;
 }
 
+// S.ranked is a list of GROUPS (arrays of skin ids). Skins in the same group are tied.
+const placed = () => S.ranked.reduce((n, g) => n + g.length, 0);
+const pivot = () => (S.pivot != null && S.pivot >= S.lo && S.pivot < S.hi) ? S.pivot : (S.lo + S.hi) >> 1;
+function flat() {
+  const out = []; let pos = 1;
+  S.ranked.forEach(g => { g.forEach(id => out.push({ id, rank: pos, tied: g.length > 1 })); pos += g.length; });
+  return out;
+}
+
 function pickWeapon(w) {
   W = w; S = null; skins = skinsBy[w];
   const saved = readSaved(w);
@@ -198,11 +210,13 @@ function pickWeapon(w) {
   S = saved; S.mode = S.mode || "all"; S.hist = S.hist || [];
   skins = activeSkins(w, S.mode);
   const ok = id => skins[id];
-  S.ranked = S.ranked.filter(ok); S.pending = S.pending.filter(ok);
+  S.ranked = S.ranked.map(g => Array.isArray(g) ? g : [g]).map(g => g.filter(ok)).filter(g => g.length);
+  S.pending = S.pending.filter(ok); S.pivot = null;
   if (S.cur && !ok(S.cur)) S.cur = null;
-  const known = new Set([...S.ranked, ...S.pending, S.cur]);
+  const known = new Set([...S.ranked.flat(), ...S.pending, S.cur]);
   Object.keys(skins).forEach(id => { if (!known.has(id)) S.pending.push(id); });
   if (S.hi > S.ranked.length) S.hi = S.ranked.length;
+  if (S.lo > S.hi) S.lo = S.hi;
   advance(); save(); go("R");
 }
 
@@ -248,12 +262,13 @@ function setup(m) {
 }
 
 function advance() {
+  decideOpen = false;
   while (true) {
     if (S.cur == null) {
       if (!S.pending.length) return;
-      S.cur = S.pending.shift(); S.lo = 0; S.hi = S.ranked.length;
+      S.cur = S.pending.shift(); S.lo = 0; S.hi = S.ranked.length; S.pivot = null;
     }
-    if (S.lo >= S.hi) { S.ranked.splice(S.lo, 0, S.cur); S.cur = null; continue; }
+    if (S.lo >= S.hi) { S.ranked.splice(S.lo, 0, [S.cur]); S.cur = null; continue; }
     flip = Math.random() < .5;
     return;
   }
@@ -262,13 +277,26 @@ const snap = () => JSON.stringify({ ranked: S.ranked, pending: S.pending, cur: S
 
 function choose(curWins) {
   S.hist.push(snap()); if (S.hist.length > 25) S.hist.shift();
-  const mid = (S.lo + S.hi) >> 1;
+  const mid = pivot();
   if (curWins) S.hi = mid; else S.lo = mid + 1;
+  S.pivot = null;
   advance(); save(); render();
+}
+// "Can't decide" option 1: the challenger ties with the skin it is facing, so it joins that skin's rank group.
+function tie() {
+  S.hist.push(snap()); if (S.hist.length > 25) S.hist.shift();
+  S.ranked[pivot()].push(S.cur); S.cur = null; S.pivot = null;
+  advance(); save(); render();
+}
+// "Can't decide" option 2: face a different already-ranked skin. Any skin inside the remaining range is a valid test.
+function otherMatchup() {
+  const c = []; for (let i = S.lo; i < S.hi; i++) if (i !== pivot()) c.push(i);
+  if (!c.length) return;
+  S.pivot = c[Math.floor(Math.random() * c.length)]; flip = Math.random() < .5; decideOpen = false; save(); render();
 }
 function undo() {
   if (!S.hist.length) return;
-  Object.assign(S, JSON.parse(S.hist.pop())); flip = Math.random() < .5; save(); render();
+  Object.assign(S, JSON.parse(S.hist.pop())); S.pivot = null; decideOpen = false; flip = Math.random() < .5; save(); render();
 }
 function restart() {
   if (!confirm("Erase your " + W + " ranking and start over?")) return;
@@ -344,7 +372,7 @@ function render() {
   if (view === "A") return admin(m);
   if (view === "S" && W) return setup(m);
   if (!hasW) return go("H");
-  const total = Object.keys(skins).length, done = S.ranked.length;
+  const total = Object.keys(skins).length, done = placed();
   $("pb").style.width = (done / total * 100) + "%";
   if (view === "R") return rank(m, total, done);
   if (view === "I") return shareView(m, done);
@@ -356,7 +384,7 @@ function home(m) {
   const h = document.createElement("div"); h.className = "msg"; h.innerHTML = "<h2 style='color:#ece8e1'>What do you want to rank?</h2>";
   const g = document.createElement("div"); g.className = "big";
   WEAPONS.forEach(w => {
-    const sv = readSaved(w), total = Object.keys(activeSkins(w, sv ? sv.mode : "all")).length, d = sv ? sv.ranked.length : 0;
+    const sv = readSaved(w), total = Object.keys(activeSkins(w, sv ? sv.mode : "all")).length, d = sv ? sv.ranked.reduce((n, g) => n + (Array.isArray(g) ? g.length : 1), 0) : 0;
     const b = document.createElement("button");
     b.innerHTML = w.toUpperCase() + "<small>" + (sv ? d + " / " + total + " ranked" + (sv.mode === "premium" ? " (Premium+)" : "") + " · continue" : total + " skins · start") + "</small>";
     b.onclick = () => pickWeapon(w);
@@ -373,18 +401,28 @@ function rank(m, total, done) {
     return;
   }
   $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap a skin to pick it" : " · ← / → keys to choose");
-  const mid = (S.lo + S.hi) >> 1, a = S.cur, b = S.ranked[mid];
+  const mid = pivot(), a = S.cur, b = S.ranked[mid][0];
   const left = flip ? b : a, right = flip ? a : b;
   const arena = document.createElement("div"); arena.className = "arena";
   const vs = document.createElement("div"); vs.className = "vs"; vs.textContent = "VS";
   arena.append(cardEl(skins[left], () => choose(left === a)), vs, cardEl(skins[right], () => choose(right === a)));
   m.appendChild(arena);
   const tools = document.createElement("div"); tools.className = "tools"; tools.style.justifyContent = "center"; tools.style.marginTop = "18px";
-  tools.innerHTML = '<button id="un">Undo</button>';
+  tools.innerHTML = '<button id="un">Undo</button><button id="cd">Can\u2019t decide</button>';
   m.appendChild(tools);
   $("un").disabled = !S.hist.length; $("un").onclick = undo;
+  $("cd").classList.toggle("on", decideOpen);
+  $("cd").onclick = () => { decideOpen = !decideOpen; render(); };
+  if (decideOpen) {
+    const p = document.createElement("div"); p.className = "decide";
+    p.innerHTML = '<b>Can\u2019t pick between these two?</b>A tie gives both skins the same rank, so your ranking stays honest. Or get a different matchup and place this skin another way.<div class="tools" style="justify-content:center"><button id="ti">Call it a tie</button><button id="dm">Different matchup</button><button id="cx">Cancel</button></div>' + (S.hi - S.lo <= 1 ? '<div style="font-size:12px">No other matchup is possible for this skin right now, so choose a winner or call it a tie.</div>' : "");
+    m.appendChild(p);
+    $("ti").onclick = tie; $("dm").onclick = otherMatchup; $("cx").onclick = () => { decideOpen = false; render(); };
+    $("dm").disabled = S.hi - S.lo <= 1;
+    p.scrollIntoView({ block: "nearest" });
+  }
   const h = document.createElement("div"); h.className = "hint";
-  h.textContent = (TOUCH ? "Tap the skin you like more. Tap the small thumbnails to preview other color variants (swipe the strip for more)." : "Click the skin you like more. Click the small thumbnails to preview other color variants.") + " You can stop anytime: your ranking is saved.";
+  h.textContent = (TOUCH ? "Tap the skin you like more. Tap the small thumbnails to preview other color variants (swipe the strip for more)." : "Click the skin you like more. Click the small thumbnails to preview other color variants.") + " Can\u2019t decide? Use the button above. You can stop anytime: your ranking is saved.";
   m.appendChild(h);
 }
 
@@ -393,16 +431,16 @@ function list(m, total, done) {
   const tools = document.createElement("div"); tools.className = "tools";
   tools.innerHTML = '<button id="cp">Copy as text</button><button id="sh">Share top 10 image</button><button id="rs">Start over</button>';
   m.appendChild(tools);
-  $("cp").onclick = () => navigator.clipboard.writeText(S.ranked.map((id, i) => (i + 1) + ". " + skins[id].name).join("\n")).then(() => $("cp").textContent = "Copied!");
+  $("cp").onclick = () => navigator.clipboard.writeText(flat().map(e => (e.tied ? "T" : "") + e.rank + ". " + skins[e.id].name).join("\n")).then(() => $("cp").textContent = "Copied!");
   $("rs").onclick = restart;
   $("sh").onclick = () => go("I"); $("sh").disabled = !S.ranked.length;
   if (!S.ranked.length) m.insertAdjacentHTML("beforeend", '<div class="msg">Nothing ranked yet. Go pick some skins!</div>');
-  S.ranked.forEach((id, i) => {
-    const s = skins[id], t = tiers[s.tier], r = document.createElement("div"); r.className = "row";
-    r.innerHTML = '<div class="n">' + (i + 1) + '</div><div></div><div><b></b><br><small></small></div><div></div>';
+  flat().forEach(e => {
+    const s = skins[e.id], t = tiers[s.tier], r = document.createElement("div"); r.className = "row";
+    r.innerHTML = '<div class="n' + (e.tied ? ' t' : '') + '">' + (e.tied ? "T" : "") + e.rank + '</div><div></div><div><b></b><br><small></small></div><div></div>';
     r.children[1].appendChild(imgEl(s.vars[0]));
     r.querySelector("b").textContent = s.name;
-    r.querySelector("small").textContent = (t ? t.name + " · " : "") + s.vars.length + " color" + (s.vars.length > 1 ? "s" : "");
+    r.querySelector("small").textContent = (e.tied ? "Tied · " : "") + (t ? t.name + " · " : "") + s.vars.length + " color" + (s.vars.length > 1 ? "s" : "");
     const vv = r.children[3]; vv.style.display = "flex"; vv.style.gap = "3px";
     s.vars.slice(0, 6).forEach(v => { const x = imgEl(v); x.style.cssText = "width:42px;height:24px"; vv.appendChild(x); });
     m.appendChild(r);
@@ -443,7 +481,7 @@ async function renderCard(top) {
     if (i === 0) { x.strokeStyle = "#ff4655"; x.lineWidth = 3; x.stroke(); }
     x.fillStyle = t ? t.color : "#ff4655"; x.fillRect(50, y + 12, 7, rowH - 24);
     x.fillStyle = "#ff4655"; x.font = "800 54px " + F; x.textAlign = "center";
-    x.fillText(String(i + 1).padStart(2, "0"), 125, y + 72);
+    x.fillText(sk.tied ? "T" + sk.rank : String(sk.rank).padStart(2, "0"), 125, y + 72);
     x.textAlign = "left";
     const im = imgs[i];
     if (im) {
@@ -467,7 +505,7 @@ function shareView(m, done) {
 }
 
 function sharePanel(m) {
-  const top = S.ranked.slice(0, 10).map(id => skins[id]);
+  const top = flat().slice(0, 10).map(e => Object.assign({}, skins[e.id], { rank: e.rank, tied: e.tied }));
   const box = document.createElement("div"); box.className = "share";
   box.innerHTML = '<div class="msg" style="padding:30px 0">Building your image…</div>';
   m.appendChild(box);
@@ -526,7 +564,7 @@ function admin(m) {
 
 document.addEventListener("keydown", e => {
   if (view !== "R" || !S || S.cur == null) return;
-  const mid = (S.lo + S.hi) >> 1, a = S.cur, b = S.ranked[mid];
+  const mid = pivot(), a = S.cur, b = S.ranked[mid][0];
   const left = flip ? b : a, right = flip ? a : b;
   if (e.key === "ArrowLeft") choose(left === a);
   else if (e.key === "ArrowRight") choose(right === a);
