@@ -72,6 +72,10 @@ main{max-width:1300px;margin:0 auto;padding:10px 20px 40px}
 .vh{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
 .vbox video{width:100%;max-height:70vh;background:#000;border-radius:4px;display:block}
 .vnote{font-size:12px;color:var(--mut);margin-top:8px;text-align:center}
+.sec{max-width:1000px;margin:18px auto 8px;color:var(--mut);font-size:13px;letter-spacing:2px;text-transform:uppercase}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-width:1000px;margin:0 auto}
+.wgrid button{padding:18px 8px;font-size:17px;font-weight:800;letter-spacing:2px;border-width:2px}
+.wgrid small{display:block;font-size:11px;color:var(--mut);letter-spacing:.3px;margin-top:6px;font-weight:400;text-transform:none}
 .share{max-width:560px;margin:10px auto;text-align:center}
 .prev{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);display:block}
 button,.card{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -111,6 +115,8 @@ input,select{font-size:16px}
 .tools input{flex:1 1 100%}
 .login{margin:30px auto}
 .opts{grid-template-columns:1fr}
+.wgrid{grid-template-columns:repeat(2,1fr)}
+.wgrid button{padding:14px 6px;font-size:15px}
 .ex img{height:46px}
 .ex div{font-size:11px}
 }
@@ -133,7 +139,11 @@ input,select{font-size:16px}
 
 <script>
 const API = "https://valorant-api.com/v1";
-const WEAPONS = ["Vandal", "Phantom"];
+let WEAPONS = [];
+const isWeapon = k => k !== "Maps" && k !== "Agents";
+const nounOf = k => isWeapon(k) ? k + " skins" : k.toLowerCase();
+const itemOf = k => isWeapon(k) ? "skin" : k === "Maps" ? "map" : "agent";
+const titleOf = k => !k ? "Valorant <b>Ranker</b>" : isWeapon(k) ? k + " <b>Skin</b> Ranker" : (k === "Maps" ? "Map" : "Agent") + " <b>Ranker</b>";
 const ADMIN_PW = "lemonexusisthebest";
 const keyOf = w => "skinRanker_" + w;
 let skinsBy = {}, tiers = {}, W = null, skins = {}, S = null, flip = false, view = "H", decideOpen = false;
@@ -144,15 +154,16 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 async function load() {
   $("main").innerHTML = '<div class="msg">Fetching the latest skin lists…</div>';
   try {
-    const [w, t] = await Promise.all([
+    const [w, t, mp, ag] = await Promise.all([
       fetch(API + "/weapons").then(r => r.json()),
-      fetch(API + "/contenttiers").then(r => r.json()).catch(() => ({ data: [] }))
+      fetch(API + "/contenttiers").then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(API + "/maps").then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(API + "/agents?isPlayableCharacter=true").then(r => r.json()).catch(() => ({ data: [] }))
     ]);
     (t.data || []).forEach(x => tiers[x.uuid] = { name: x.devName, rank: x.rank, color: "#" + (x.highlightColor || "8b978fff").slice(0, 6) });
-    WEAPONS.forEach(name => {
-      skinsBy[name] = {};
-      const wp = w.data.find(x => x.displayName === name);
-      wp.skins.forEach(s => {
+    w.data.forEach(wp => {
+      const name = wp.displayName; WEAPONS.push(name); skinsBy[name] = {};
+      (wp.skins || []).forEach(s => {
         if (/random favorite/i.test(s.displayName)) return;
         const seen = new Set(), vars = [];
         const add = (n, a, b, vid) => { const img = a || b; if (img && !seen.has(img)) { seen.add(img); vars.push({ name: n, img, alt: b, video: vid || null }); } };
@@ -173,6 +184,19 @@ async function load() {
         if (!vars.length) return;
         skinsBy[name][s.uuid] = { id: s.uuid, name: s.displayName, tier: s.contentTierUuid, weapon: name, vars, video: finalVid };
       });
+    });
+    const pri = k => k === "Vandal" ? 0 : k === "Phantom" ? 1 : 2;
+    WEAPONS.sort((a, b) => pri(a) - pri(b));
+    // Maps (the practice range / tutorial map are left out) and playable agents
+    skinsBy.Maps = {}; skinsBy.Agents = {};
+    (mp.data || []).forEach(x => {
+      if (/^(the range|basic training)$/i.test(x.displayName)) return;
+      const vars = []; [["Splash", x.splash], ["Minimap", x.displayIcon]].forEach(([n, u]) => { if (u) vars.push({ name: n, img: u, alt: null, video: null }); });
+      if (vars.length) skinsBy.Maps[x.uuid] = { id: x.uuid, name: x.displayName, tier: null, weapon: "Maps", vars, video: null, tag: x.tacticalDescription || "", kindWord: " view" };
+    });
+    (ag.data || []).forEach(x => {
+      const vars = []; [["Bust", x.bustPortrait], ["Full art", x.fullPortrait], ["Icon", x.displayIcon]].forEach(([n, u]) => { if (u) vars.push({ name: n, img: u, alt: null, video: null }); });
+      if (vars.length) skinsBy.Agents[x.uuid] = { id: x.uuid, name: x.displayName, tier: null, weapon: "Agents", vars, video: null, tag: (x.role && x.role.displayName) || "", kindWord: " view" };
     });
   } catch (e) {
     $("info").textContent = "";
@@ -215,7 +239,7 @@ function flat() {
 function pickWeapon(w) {
   W = w; S = null; skins = skinsBy[w];
   const saved = readSaved(w);
-  if (!saved) return go("S");
+  if (!saved) { if (isWeapon(w)) return go("S"); return startRanking("all"); }
   S = saved; S.mode = S.mode || "all"; S.hist = S.hist || [];
   skins = activeSkins(w, S.mode);
   const ok = id => skins[id];
@@ -392,7 +416,7 @@ function cardEl(s, onPick, small) {
     sel = i; const u = videoFor(s, i);
     pb.disabled = !u.url; pb.textContent = u.url ? "▶ Preview video" : "No preview video";
     stage.innerHTML = ""; stage.appendChild(imgEl(s.vars[i]));
-    vl.textContent = s.vars.length > 1 ? "Variant: " + s.vars[i].name + " (" + (i + 1) + "/" + s.vars.length + ")" : "Single color";
+    vl.textContent = s.vars.length > 1 ? (s.kindWord ? "View: " : "Variant: ") + s.vars[i].name + " (" + (i + 1) + "/" + s.vars.length + ")" : (s.kindWord ? "" : "Single color");
     [...vs.children].forEach((b, j) => b.classList.toggle("sel", j === i));
   };
   if (s.vars.length > 1) s.vars.forEach((v, i) => {
@@ -402,8 +426,9 @@ function cardEl(s, onPick, small) {
   });
   c.innerHTML = '<div class="name"></div><div class="tier"></div>';
   c.querySelector(".name").textContent = s.name;
-  const te = c.querySelector(".tier"); te.textContent = (small ? s.weapon + " · " : "") + (t ? t.name : ""); if (t) te.style.color = t.color;
-  c.prepend(stage); c.insertBefore(vl, c.children[1]); c.appendChild(pb); c.appendChild(vs);
+  const te = c.querySelector(".tier"); te.textContent = (small ? s.weapon + " · " : "") + (t ? t.name : (s.tag || "")); if (t) te.style.color = t.color;
+  c.prepend(stage); c.insertBefore(vl, c.children[1]); if (!s.kindWord) c.appendChild(pb);
+  c.appendChild(vs);
   show(0);
   if (onPick) c.onclick = onPick;
   return c;
@@ -414,7 +439,7 @@ function render() {
   const hasW = !!(W && S);
   $("tR").style.display = $("tL").style.display = hasW ? "" : "none";
   ["R", "L", "H", "A"].forEach(v => $("t" + v).classList.toggle("on", view === v));
-  $("ttl").innerHTML = (W && view !== "H" && view !== "A" ? W : "Valorant") + " <b>Skin</b> Ranker";
+  $("ttl").innerHTML = titleOf(W && view !== "H" && view !== "A" ? W : null);
   $("pb").style.width = "0";
   if (view === "H") return home(m);
   if (view === "A") return admin(m);
@@ -429,26 +454,32 @@ function render() {
 
 function home(m) {
   $("info").textContent = "Your progress is saved automatically in this browser.";
-  const h = document.createElement("div"); h.className = "msg"; h.innerHTML = "<h2 style='color:#ece8e1'>What do you want to rank?</h2>";
-  const g = document.createElement("div"); g.className = "big";
-  WEAPONS.forEach(w => {
-    const sv = readSaved(w), total = Object.keys(activeSkins(w, sv ? sv.mode : "all")).length, d = sv ? sv.ranked.reduce((n, g) => n + (Array.isArray(g) ? g.length : 1), 0) : 0;
-    const b = document.createElement("button");
-    b.innerHTML = w.toUpperCase() + "<small>" + (sv ? d + " / " + total + " ranked" + (sv.mode === "premium" ? " (Premium+)" : "") + " · continue" : total + " skins · start") + "</small>";
-    b.onclick = () => pickWeapon(w);
-    g.appendChild(b);
-  });
-  m.append(h, g);
+  const h = document.createElement("div"); h.className = "msg"; h.style.padding = "24px 10px 6px"; h.innerHTML = "<h2 style='color:#ece8e1;margin:0'>What do you want to rank?</h2>";
+  m.appendChild(h);
+  const sec = (title, keys) => {
+    keys = keys.filter(k => skinsBy[k] && Object.keys(skinsBy[k]).length); if (!keys.length) return;
+    const t = document.createElement("h3"); t.className = "sec"; t.textContent = title;
+    const g = document.createElement("div"); g.className = "wgrid";
+    keys.forEach(k => {
+      const sv = readSaved(k), total = Object.keys(activeSkins(k, sv ? sv.mode : "all")).length;
+      const d = sv ? sv.ranked.reduce((n, x) => n + (Array.isArray(x) ? x.length : 1), 0) : 0;
+      const b = document.createElement("button");
+      b.innerHTML = k.toUpperCase() + "<small>" + (sv ? d + " / " + total + " ranked" + (sv.mode === "premium" ? " (Premium+)" : "") + " · continue" : total + " " + (isWeapon(k) ? "skins" : "to rank") + " · start") + "</small>";
+      b.onclick = () => pickWeapon(k); g.appendChild(b);
+    });
+    m.append(t, g);
+  };
+  sec("Weapon skins", WEAPONS); sec("Maps & agents", ["Maps", "Agents"]);
 }
 
 function rank(m, total, done) {
   if (S.cur == null) {
-    $("info").textContent = "All " + total + (S.mode === "premium" ? " Premium+ " : " ") + W + " skins ranked!";
+    $("info").textContent = "All " + total + (S.mode === "premium" ? " Premium+ " : " ") + nounOf(W) + " ranked!";
     m.innerHTML = '<div class="msg" style="padding:18px 10px 6px"><h2 style="margin:0 0 6px;color:#ece8e1">You are done 🎉</h2>Here is your top 10 to download or copy. Your full list is under “My ranking”.</div>';
     sharePanel(m);
     return;
   }
-  $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap a skin to pick it" : " · ← / → keys to choose");
+  $("info").textContent = (S.mode === "premium" ? "Premium+ only · " : "") + done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap one to pick it" : " · ← / → keys to choose");
   const mid = pivot(), a = S.cur, b = S.ranked[mid][0];
   const left = flip ? b : a, right = flip ? a : b;
   const arena = document.createElement("div"); arena.className = "arena";
@@ -470,7 +501,7 @@ function rank(m, total, done) {
     p.scrollIntoView({ block: "nearest" });
   }
   const h = document.createElement("div"); h.className = "hint";
-  h.textContent = (TOUCH ? "Tap the skin you like more. Tap the small thumbnails to preview other color variants (swipe the strip for more)." : "Click the skin you like more. Click the small thumbnails to preview other color variants.") + " Can\u2019t decide? Use the button above. You can stop anytime: your ranking is saved.";
+  h.textContent = (TOUCH ? "Tap the " + itemOf(W) + " you like more. Tap the small thumbnails to see other versions (swipe the strip for more)." : "Click the " + itemOf(W) + " you like more. Click the small thumbnails to see other versions.") + " Can\u2019t decide? Use the button above. You can stop anytime: your ranking is saved.";
   m.appendChild(h);
 }
 
@@ -488,10 +519,10 @@ function list(m, total, done) {
     r.innerHTML = '<div class="n' + (e.tied ? ' t' : '') + '">' + (e.tied ? "T" : "") + e.rank + '</div><div></div><div><b></b><br><small></small></div><div></div>';
     r.children[1].appendChild(imgEl(s.vars[0]));
     r.querySelector("b").textContent = s.name;
-    r.querySelector("small").textContent = (e.tied ? "Tied · " : "") + (t ? t.name + " · " : "") + s.vars.length + " color" + (s.vars.length > 1 ? "s" : "");
+    r.querySelector("small").textContent = (e.tied ? "Tied · " : "") + (t ? t.name + " · " : (s.tag ? s.tag + " · " : "")) + s.vars.length + (s.kindWord || " color") + (s.vars.length > 1 ? "s" : "");
     const u0 = videoFor(s, 0), pvb = document.createElement("button");
     pvb.className = "pv"; pvb.style.cssText = "margin:4px 0 0;display:inline-block"; pvb.textContent = u0.url ? "▶ Preview" : "No preview"; pvb.disabled = !u0.url;
-    pvb.onclick = () => openVideo(s, 0); r.children[2].appendChild(pvb);
+    pvb.onclick = () => openVideo(s, 0); if (!s.kindWord) r.children[2].appendChild(pvb);
     const vv = r.children[3]; vv.style.display = "flex"; vv.style.gap = "3px";
     s.vars.slice(0, 6).forEach(v => { const x = imgEl(v); x.style.cssText = "width:42px;height:24px"; vv.appendChild(x); });
     m.appendChild(r);
@@ -524,8 +555,8 @@ async function renderCard(top) {
   x.fillStyle = "#ff4655"; x.fillRect(50, 70, 8, 160);
   x.textAlign = "left"; x.textBaseline = "alphabetic";
   x.fillStyle = "#ece8e1"; x.font = "800 80px " + F; x.fillText("MY TOP " + n, 80, 140);
-  x.fillStyle = "#ff4655"; x.font = "800 52px " + F; x.fillText(W.toUpperCase() + " SKINS", 80, 200);
-  x.fillStyle = "#8b978f"; x.font = "600 22px " + F; x.fillText(S.mode === "premium" ? "PREMIUM+ RANKING" : "ALL SKINS RANKING", 80, 235);
+  x.fillStyle = "#ff4655"; x.font = "800 52px " + F; x.fillText(isWeapon(W) ? W.toUpperCase() + " SKINS" : W.toUpperCase(), 80, 200);
+  x.fillStyle = "#8b978f"; x.font = "600 22px " + F; x.fillText(!isWeapon(W) ? "MY RANKING" : S.mode === "premium" ? "PREMIUM+ RANKING" : "ALL SKINS RANKING", 80, 235);
   top.forEach((sk, i) => {
     const y = y0 + i * (rowH + gap), t = tiers[sk.tier];
     rr(50, y, 980, rowH, 10); x.fillStyle = i === 0 ? "#2a2a38" : "#1b2733"; x.fill();
@@ -542,10 +573,10 @@ async function renderCard(top) {
     let fs = 38; x.font = "800 " + fs + "px " + F;
     while (x.measureText(sk.name).width > 380 && fs > 20) { fs--; x.font = "800 " + fs + "px " + F; }
     x.fillStyle = "#ece8e1"; x.fillText(sk.name, 620, y + 60);
-    if (t) { x.fillStyle = t.color; x.font = "700 22px " + F; x.fillText(t.name.toUpperCase(), 620, y + 92); }
+    const lab = t ? t.name : (sk.tag || ""); if (lab) { x.fillStyle = t ? t.color : "#8b978f"; x.font = "700 22px " + F; x.fillText(lab.toUpperCase(), 620, y + 92); }
   });
   x.textAlign = "center"; x.fillStyle = "#8b978f"; x.font = "600 22px " + F;
-  x.fillText(W + " Skin Ranker  ·  " + new Date().toLocaleDateString(), Wd / 2, Hd - 26);
+  x.fillText((isWeapon(W) ? W + " Skin Ranker" : W + " Ranker") + "  ·  " + new Date().toLocaleDateString(), Wd / 2, Hd - 26);
   return { canvas: c, missing };
 }
 
@@ -564,7 +595,7 @@ function sharePanel(m) {
     box.innerHTML = "";
     canvas.className = "prev"; box.appendChild(canvas);
     const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
-    const fname = "my-top-" + top.length + "-" + W.toLowerCase() + "-skins.png";
+    const fname = "my-top-" + top.length + "-" + W.toLowerCase() + ".png";
     const bar = document.createElement("div"); bar.className = "tools"; bar.style.justifyContent = "center";
     bar.innerHTML = '<button id="dl">Download image</button><button id="ci">Copy image</button><button id="sx">Share…</button>';
     const st = document.createElement("div"); st.className = "hint"; st.style.minHeight = "18px";
@@ -597,16 +628,18 @@ function admin(m) {
     $("pw").onkeydown = e => { if (e.key === "Enter") tryLogin(); };
     return;
   }
-  m.innerHTML = '<div class="tools"><input id="q" placeholder="Search skins by name…" style="flex:1;min-width:200px" autofocus><select id="wf"><option value="">Vandal + Phantom</option><option>Vandal</option><option>Phantom</option></select><button id="lo">Log out</button></div><div class="info" id="cnt"></div><div class="grid" id="gr"></div>';
+  m.innerHTML = '<div class="tools"><input id="q" placeholder="Search by name…" style="flex:1;min-width:200px" autofocus><select id="wf"></select><button id="lo">Log out</button></div><div class="info" id="cnt"></div><div class="grid" id="gr"></div>';
+  $("wf").innerHTML = '<option value="">Everything</option>' + Object.keys(skinsBy).map(k => "<option>" + k + "</option>").join("");
   const draw = () => {
     const q = $("q").value.trim().toLowerCase(), wf = $("wf").value, gr = $("gr");
     gr.innerHTML = "";
     let n = 0;
-    WEAPONS.forEach(w => {
+    Object.keys(skinsBy).forEach(w => {
       if (wf && wf !== w) return;
-      Object.values(skinsBy[w]).filter(s => s.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name)).forEach(s => { n++; gr.appendChild(cardEl(s, null, true)); });
+      Object.values(skinsBy[w]).filter(s => s.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name)).forEach(s => { n++; if (n <= 200) gr.appendChild(cardEl(s, null, true)); });
     });
-    $("cnt").textContent = n + " skin" + (n === 1 ? "" : "s") + " shown (" + Object.keys(skinsBy.Vandal).length + " Vandal, " + Object.keys(skinsBy.Phantom).length + " Phantom total)";
+    const tot = Object.values(skinsBy).reduce((a, o) => a + Object.keys(o).length, 0);
+    $("cnt").textContent = n + " result" + (n === 1 ? "" : "s") + (n > 200 ? " (showing the first 200, type to narrow down)" : "") + " · " + tot + " items loaded";
   };
   $("q").oninput = draw; $("wf").onchange = draw;
   $("lo").onclick = () => { sessionStorage.removeItem("skinAdmin"); go("H"); };
