@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1923">
+<title>Valorant Skin Ranker</title>
+<style>
+:root{--bg:#0f1923;--panel:#1b2733;--line:#2e3d4d;--red:#ff4655;--txt:#ece8e1;--mut:#8b978f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:"Segoe UI",Roboto,Arial,sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-size:20px;letter-spacing:2px;text-transform:uppercase;margin:0}
+h1 b{color:var(--red)}
+nav{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+button,select,input{background:var(--panel);color:var(--txt);border:1px solid var(--line);padding:8px 14px;border-radius:4px;font-size:14px;font-family:inherit}
+button{cursor:pointer;text-transform:uppercase;letter-spacing:1px}
+button:hover:not(:disabled){border-color:var(--red)}
+button:disabled{opacity:.4;cursor:default}
+button.on{background:var(--red);border-color:var(--red)}
+.bar{height:6px;background:var(--panel)}
+.bar i{display:block;height:100%;background:var(--red);width:0;transition:width .3s}
+.info{text-align:center;color:var(--mut);font-size:13px;padding:10px}
+main{max-width:1300px;margin:0 auto;padding:10px 20px 40px}
+.arena{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:stretch}
+.vs{align-self:center;font-weight:800;font-size:26px;color:var(--red)}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:8px;padding:18px;display:flex;flex-direction:column;transition:.15s}
+.card.pick{cursor:pointer}
+.card.pick:hover{border-color:var(--red);transform:translateY(-3px)}
+.stage{height:230px;display:flex;align-items:center;justify-content:center}
+.small .stage{height:120px}
+.small{padding:12px}
+.stage img{max-width:100%;max-height:100%;object-fit:contain}
+.name{text-align:center;font-size:22px;font-weight:700;margin-top:8px}
+.small .name{font-size:17px}
+.tier{text-align:center;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+.vlab{text-align:center;color:var(--mut);font-size:13px;margin:6px 0}
+.vars{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:auto;padding-top:8px}
+.vars button{padding:2px;width:64px;height:40px;background:#0f1923}
+.vars button.sel{border-color:var(--red)}
+.vars img{width:100%;height:100%;object-fit:contain}
+.hint{text-align:center;color:var(--mut);font-size:12px;margin-top:16px}
+.row{display:grid;grid-template-columns:44px 140px 1fr auto;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 12px;margin-bottom:6px}
+.row .n{font-size:20px;font-weight:800;color:var(--red);text-align:center}
+.row img{width:140px;height:50px;object-fit:contain}
+.row small{color:var(--mut)}
+.tools{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.msg{text-align:center;padding:60px 20px;color:var(--mut)}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:800px;margin:30px auto}
+.big button{padding:50px 20px;font-size:30px;font-weight:800;letter-spacing:4px;border-width:2px}
+.big small{display:block;font-size:13px;color:var(--mut);letter-spacing:1px;margin-top:10px;font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:10px}
+.login{max-width:340px;margin:60px auto;text-align:center}
+.login input{width:100%;margin-bottom:10px}
+.err{color:var(--red);font-size:13px;min-height:18px}
+button,.card{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.card.pick:active{border-color:var(--red);transform:scale(.99)}
+@media(hover:none){.card.pick:hover{transform:none;border-color:var(--line)}}
+@media(max-width:760px){
+body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+header{padding:10px 14px}
+h1{font-size:15px;letter-spacing:1px}
+nav{position:fixed;left:0;right:0;bottom:0;margin:0;gap:0;flex-wrap:nowrap;background:var(--panel);border-top:1px solid var(--line);z-index:50;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;min-height:56px;border:0;border-radius:0;border-right:1px solid var(--line);font-size:10.5px;letter-spacing:.3px;padding:4px 2px;line-height:1.2}
+nav button:last-child{border-right:0}
+main{padding:4px 10px 16px}
+.info{font-size:12px;padding:6px 10px}
+input,select{font-size:16px}
+.arena{grid-template-columns:1fr;gap:6px}
+.vs{display:grid;place-items:center;width:34px;height:34px;margin:-14px auto;border-radius:50%;background:var(--red);color:#fff;font-size:13px;position:relative;z-index:2;border:3px solid var(--bg)}
+.card{padding:10px 10px 8px}
+.stage{height:clamp(90px,19vh,180px);height:clamp(90px,19svh,180px)}
+.name{font-size:18px;margin-top:4px}
+.tier{font-size:11px}
+.vlab{font-size:11px;margin:2px 0}
+.vars{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;padding:6px 0 2px;-webkit-overflow-scrolling:touch}
+.vars button{flex:0 0 auto;width:58px;height:38px}
+.tools button{min-height:44px;padding:8px 18px}
+.hint{font-size:11px;margin-top:8px}
+.row{grid-template-columns:30px 90px 1fr;gap:8px;padding:6px 8px}
+.row .n{font-size:16px}
+.row img{width:90px;height:40px}
+.row>:last-child{display:none}
+.big{grid-template-columns:1fr;gap:14px;margin:14px auto}
+.big button{padding:34px 16px;font-size:26px}
+.grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px}
+.small{padding:8px}
+.small .stage{height:80px}
+.small .name{font-size:14px}
+.tools input{flex:1 1 100%}
+.login{margin:30px auto}
+}
+</style>
+</head>
+<body>
+<header>
+<h1 id="ttl">Valorant <b>Skin</b> Ranker</h1>
+<nav>
+<button id="tR">Rank</button>
+<button id="tL">My ranking</button>
+<button id="tH">Switch weapon</button>
+<button id="tA">Admin</button>
+<button id="rI" title="Re-attempt loading any skin images that look blank">Reload images</button>
+</nav>
+</header>
+<div class="bar"><i id="pb"></i></div>
+<div class="info" id="info">Loading skins…</div>
+<main id="main"></main>
+
+<script>
+const API = "https://valorant-api.com/v1";
+const WEAPONS = ["Vandal", "Phantom"];
+const ADMIN_PW = "lemonexusisthebest";
+const keyOf = w => "skinRanker_" + w;
+let skinsBy = {}, tiers = {}, W = null, skins = {}, S = null, flip = false, view = "H";
+const $ = id => document.getElementById(id);
+const TOUCH = matchMedia("(hover: none)").matches;
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+async function load() {
+  $("main").innerHTML = '<div class="msg">Fetching the latest skin lists…</div>';
+  try {
+    const [w, t] = await Promise.all([
+      fetch(API + "/weapons").then(r => r.json()),
+      fetch(API + "/contenttiers").then(r => r.json()).catch(() => ({ data: [] }))
+    ]);
+    (t.data || []).forEach(x => tiers[x.uuid] = { name: x.devName, color: "#" + (x.highlightColor || "8b978fff").slice(0, 6) });
+    WEAPONS.forEach(name => {
+      skinsBy[name] = {};
+      const wp = w.data.find(x => x.displayName === name);
+      wp.skins.forEach(s => {
+        if (/random favorite/i.test(s.displayName)) return;
+        const seen = new Set(), vars = [];
+        const add = (n, a, b) => { const img = a || b; if (img && !seen.has(img)) { seen.add(img); vars.push({ name: n, img, alt: b }); } };
+        (s.chromas || []).forEach(c => {
+          const m = /\(([^)]*)\)/.exec(c.displayName || "");
+          add(m ? (m[1].replace(/^Variant \d+\s*/i, "").trim() || m[1]) : "Default", c.displayIcon, c.fullRender);
+        });
+        if (s.displayIcon && !seen.has(s.displayIcon)) vars.unshift({ name: "Default", img: s.displayIcon });
+        if (!vars.length) return;
+        skinsBy[name][s.uuid] = { id: s.uuid, name: s.displayName, tier: s.contentTierUuid, weapon: name, vars };
+      });
+    });
+  } catch (e) {
+    $("info").textContent = "";
+    $("main").innerHTML = '<div class="msg">Could not load skin data (are you online?).<br><br><button id="rt">Retry</button></div>';
+    $("rt").onclick = load;
+    return;
+  }
+  go("H");
+}
+
+function readSaved(w) {
+  try {
+    let raw = localStorage.getItem(keyOf(w));
+    if (!raw && w === "Vandal") raw = localStorage.getItem("vandalRankerV1");
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function save() { try { localStorage.setItem(keyOf(W), JSON.stringify(S)); } catch (e) {} }
+
+function pickWeapon(w) {
+  W = w; skins = skinsBy[w];
+  const saved = readSaved(w), ids = Object.keys(skins);
+  if (saved) {
+    S = saved; S.hist = S.hist || [];
+    const ok = id => skins[id];
+    S.ranked = S.ranked.filter(ok); S.pending = S.pending.filter(ok);
+    if (S.cur && !ok(S.cur)) S.cur = null;
+    const known = new Set([...S.ranked, ...S.pending, S.cur]);
+    ids.forEach(id => { if (!known.has(id)) S.pending.push(id); });
+    if (S.hi > S.ranked.length) S.hi = S.ranked.length;
+  } else {
+    S = { ranked: [], pending: shuffle(ids), cur: null, lo: 0, hi: 0, hist: [] };
+  }
+  advance(); save(); go("R");
+}
+
+function advance() {
+  while (true) {
+    if (S.cur == null) {
+      if (!S.pending.length) return;
+      S.cur = S.pending.shift(); S.lo = 0; S.hi = S.ranked.length;
+    }
+    if (S.lo >= S.hi) { S.ranked.splice(S.lo, 0, S.cur); S.cur = null; continue; }
+    flip = Math.random() < .5;
+    return;
+  }
+}
+const snap = () => JSON.stringify({ ranked: S.ranked, pending: S.pending, cur: S.cur, lo: S.lo, hi: S.hi });
+
+function choose(curWins) {
+  S.hist.push(snap()); if (S.hist.length > 25) S.hist.shift();
+  const mid = (S.lo + S.hi) >> 1;
+  if (curWins) S.hi = mid; else S.lo = mid + 1;
+  advance(); save(); render();
+}
+function undo() {
+  if (!S.hist.length) return;
+  Object.assign(S, JSON.parse(S.hist.pop())); flip = Math.random() < .5; save(); render();
+}
+function restart() {
+  if (!confirm("Erase your " + W + " ranking and start over?")) return;
+  localStorage.removeItem(keyOf(W)); if (W === "Vandal") localStorage.removeItem("vandalRankerV1");
+  pickWeapon(W);
+}
+function remaining() {
+  let n = Math.max(0, Math.ceil(Math.log2((S.hi - S.lo) + 1)));
+  let k = S.ranked.length + (S.cur ? 1 : 0);
+  for (let i = 0; i < S.pending.length; i++) { n += Math.ceil(Math.log2(k + 1)); k++; }
+  return n;
+}
+
+function go(v) { view = v; render(); }
+$("tR").onclick = () => go("R");
+$("tL").onclick = () => go("L");
+$("tH").onclick = () => go("H");
+$("tA").onclick = () => go("A");
+
+function imgEl(v) {
+  const i = document.createElement("img");
+  i.dataset.src = v.img; i.dataset.alt = v.alt || "";
+  i.src = v.img; i.alt = ""; i.loading = "lazy"; i.referrerPolicy = "no-referrer";
+  i.onerror = () => { if (v.alt && i.src !== v.alt) i.src = v.alt; };
+  return i;
+}
+
+$("rI").onclick = () => {
+  const b = $("rI"), stamp = Date.now();
+  document.querySelectorAll("main img").forEach(i => {
+    const u = i.dataset.src;
+    if (!u) return;
+    i.loading = "eager";
+    i.src = u + (u.includes("?") ? "&" : "?") + "r=" + stamp;
+  });
+  b.textContent = "Reloading…";
+  setTimeout(() => b.textContent = "Reload images", 1500);
+};
+
+function cardEl(s, onPick, small) {
+  const t = tiers[s.tier];
+  const c = document.createElement("div"); c.className = "card" + (onPick ? " pick" : "") + (small ? " small" : "");
+  const stage = document.createElement("div"); stage.className = "stage";
+  const vl = document.createElement("div"); vl.className = "vlab";
+  const vs = document.createElement("div"); vs.className = "vars";
+  const show = i => {
+    stage.innerHTML = ""; stage.appendChild(imgEl(s.vars[i]));
+    vl.textContent = s.vars.length > 1 ? "Variant: " + s.vars[i].name + " (" + (i + 1) + "/" + s.vars.length + ")" : "Single color";
+    [...vs.children].forEach((b, j) => b.classList.toggle("sel", j === i));
+  };
+  if (s.vars.length > 1) s.vars.forEach((v, i) => {
+    const b = document.createElement("button"); b.title = v.name; b.appendChild(imgEl(v));
+    b.onclick = e => { e.stopPropagation(); show(i); };
+    vs.appendChild(b);
+  });
+  c.innerHTML = '<div class="name"></div><div class="tier"></div>';
+  c.querySelector(".name").textContent = s.name;
+  const te = c.querySelector(".tier"); te.textContent = (small ? s.weapon + " · " : "") + (t ? t.name : ""); if (t) te.style.color = t.color;
+  c.prepend(stage); c.insertBefore(vl, c.children[1]); c.appendChild(vs);
+  show(0);
+  if (onPick) c.onclick = onPick;
+  return c;
+}
+
+function render() {
+  const m = $("main"); m.innerHTML = "";
+  const hasW = !!W;
+  $("tR").style.display = $("tL").style.display = hasW ? "" : "none";
+  ["R", "L", "H", "A"].forEach(v => $("t" + v).classList.toggle("on", view === v));
+  $("ttl").innerHTML = (hasW ? W : "Valorant") + " <b>Skin</b> Ranker";
+  $("pb").style.width = "0";
+  if (view === "H") return home(m);
+  if (view === "A") return admin(m);
+  if (!hasW) return go("H");
+  const total = Object.keys(skins).length, done = S.ranked.length;
+  $("pb").style.width = (done / total * 100) + "%";
+  if (view === "R") return rank(m, total, done);
+  return list(m, total, done);
+}
+
+function home(m) {
+  $("info").textContent = "Your progress is saved automatically in this browser.";
+  const h = document.createElement("div"); h.className = "msg"; h.innerHTML = "<h2 style='color:#ece8e1'>What do you want to rank?</h2>";
+  const g = document.createElement("div"); g.className = "big";
+  WEAPONS.forEach(w => {
+    const total = Object.keys(skinsBy[w]).length, sv = readSaved(w), d = sv ? sv.ranked.length : 0;
+    const b = document.createElement("button");
+    b.innerHTML = w.toUpperCase() + "<small>" + (d ? d + " / " + total + " ranked · continue" : total + " skins · start") + "</small>";
+    b.onclick = () => pickWeapon(w);
+    g.appendChild(b);
+  });
+  m.append(h, g);
+}
+
+function rank(m, total, done) {
+  if (S.cur == null) {
+    $("info").textContent = "All " + total + " " + W + " skins ranked!";
+    m.innerHTML = '<div class="msg"><h2>You are done 🎉</h2>Check “My ranking” for your full list.</div>';
+    return;
+  }
+  $("info").textContent = done + " of " + total + " placed · about " + remaining() + " picks left" + (TOUCH ? " · tap a skin to pick it" : " · ← / → keys to choose");
+  const mid = (S.lo + S.hi) >> 1, a = S.cur, b = S.ranked[mid];
+  const left = flip ? b : a, right = flip ? a : b;
+  const arena = document.createElement("div"); arena.className = "arena";
+  const vs = document.createElement("div"); vs.className = "vs"; vs.textContent = "VS";
+  arena.append(cardEl(skins[left], () => choose(left === a)), vs, cardEl(skins[right], () => choose(right === a)));
+  m.appendChild(arena);
+  const tools = document.createElement("div"); tools.className = "tools"; tools.style.justifyContent = "center"; tools.style.marginTop = "18px";
+  tools.innerHTML = '<button id="un">Undo</button>';
+  m.appendChild(tools);
+  $("un").disabled = !S.hist.length; $("un").onclick = undo;
+  const h = document.createElement("div"); h.className = "hint";
+  h.textContent = (TOUCH ? "Tap the skin you like more. Tap the small thumbnails to preview other color variants (swipe the strip for more)." : "Click the skin you like more. Click the small thumbnails to preview other color variants.") + " You can stop anytime: your ranking is saved.";
+  m.appendChild(h);
+}
+
+function list(m, total, done) {
+  $("info").textContent = done + " ranked, " + (total - done) + " still to place";
+  const tools = document.createElement("div"); tools.className = "tools";
+  tools.innerHTML = '<button id="cp">Copy as text</button><button id="rs">Start over</button>';
+  m.appendChild(tools);
+  $("cp").onclick = () => navigator.clipboard.writeText(S.ranked.map((id, i) => (i + 1) + ". " + skins[id].name).join("\n")).then(() => $("cp").textContent = "Copied!");
+  $("rs").onclick = restart;
+  if (!S.ranked.length) m.insertAdjacentHTML("beforeend", '<div class="msg">Nothing ranked yet. Go pick some skins!</div>');
+  S.ranked.forEach((id, i) => {
+    const s = skins[id], t = tiers[s.tier], r = document.createElement("div"); r.className = "row";
+    r.innerHTML = '<div class="n">' + (i + 1) + '</div><div></div><div><b></b><br><small></small></div><div></div>';
+    r.children[1].appendChild(imgEl(s.vars[0]));
+    r.querySelector("b").textContent = s.name;
+    r.querySelector("small").textContent = (t ? t.name + " · " : "") + s.vars.length + " color" + (s.vars.length > 1 ? "s" : "");
+    const vv = r.children[3]; vv.style.display = "flex"; vv.style.gap = "3px";
+    s.vars.slice(0, 6).forEach(v => { const x = imgEl(v); x.style.cssText = "width:42px;height:24px"; vv.appendChild(x); });
+    m.appendChild(r);
+  });
+}
+
+function admin(m) {
+  $("info").textContent = "Admin area";
+  if (sessionStorage.getItem("skinAdmin") !== "1") {
+    m.innerHTML = '<div class="login"><h2>Admin login</h2><input id="pw" type="password" placeholder="Password" autofocus><div class="err" id="er"></div><button id="lg">Log in</button></div>';
+    const tryLogin = () => {
+      if ($("pw").value === ADMIN_PW) { sessionStorage.setItem("skinAdmin", "1"); render(); }
+      else $("er").textContent = "Wrong password.";
+    };
+    $("lg").onclick = tryLogin;
+    $("pw").onkeydown = e => { if (e.key === "Enter") tryLogin(); };
+    return;
+  }
+  m.innerHTML = '<div class="tools"><input id="q" placeholder="Search skins by name…" style="flex:1;min-width:200px" autofocus><select id="wf"><option value="">Vandal + Phantom</option><option>Vandal</option><option>Phantom</option></select><button id="lo">Log out</button></div><div class="info" id="cnt"></div><div class="grid" id="gr"></div>';
+  const draw = () => {
+    const q = $("q").value.trim().toLowerCase(), wf = $("wf").value, gr = $("gr");
+    gr.innerHTML = "";
+    let n = 0;
+    WEAPONS.forEach(w => {
+      if (wf && wf !== w) return;
+      Object.values(skinsBy[w]).filter(s => s.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name)).forEach(s => { n++; gr.appendChild(cardEl(s, null, true)); });
+    });
+    $("cnt").textContent = n + " skin" + (n === 1 ? "" : "s") + " shown (" + Object.keys(skinsBy.Vandal).length + " Vandal, " + Object.keys(skinsBy.Phantom).length + " Phantom total)";
+  };
+  $("q").oninput = draw; $("wf").onchange = draw;
+  $("lo").onclick = () => { sessionStorage.removeItem("skinAdmin"); go("H"); };
+  draw();
+}
+
+document.addEventListener("keydown", e => {
+  if (view !== "R" || !S || S.cur == null) return;
+  const mid = (S.lo + S.hi) >> 1, a = S.cur, b = S.ranked[mid];
+  const left = flip ? b : a, right = flip ? a : b;
+  if (e.key === "ArrowLeft") choose(left === a);
+  else if (e.key === "ArrowRight") choose(right === a);
+  else if (e.key === "z" && (e.ctrlKey || e.metaKey)) undo();
+});
+
+load();
+</script>
+</body>
+</html>
